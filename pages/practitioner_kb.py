@@ -37,6 +37,24 @@ st.markdown("""
 </h2>
 """, unsafe_allow_html=True)
 
+# ── Sidebar: KB Maintenance ──────────────────────────────────────
+with st.sidebar:
+    with st.expander("KB Maintenance"):
+        if st.button("Run Cleanup (dry run)"):
+            from lighthouse.cleanup import run_cleanup
+            report = run_cleanup(kb, dry_run=True)
+            st.json(report)
+
+        if st.button("Apply Cleanup", type="primary"):
+            from lighthouse.cleanup import run_cleanup
+            report = run_cleanup(kb, dry_run=False)
+            st.success(
+                f"Removed {report['garbage_facts']} garbage facts. "
+                f"Classified {report['untiered_facts_classified']} tiers. "
+                f"Normalised {report['categories_normalised']} categories."
+            )
+            st.rerun()
+
 # ── Metrics strip ──────────────────────────────────────────────────
 m1, m2, m3, m4 = st.columns(4)
 with m1:

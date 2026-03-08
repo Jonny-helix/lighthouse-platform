@@ -234,10 +234,36 @@ class QueryContext:
         """Format context for the LLM prompt."""
         sections = []
 
+        # Deduplicate sources by DOI then URL before building display map
+        seen_doi: dict[str, str] = {}   # doi -> source_id (canonical)
+        seen_url: dict[str, str] = {}   # url -> source_id (canonical)
+        dedup_map: dict[str, str] = {}  # duplicate source_id -> canonical source_id
+
+        for src in self.sources:
+            doi = getattr(src, "doi", None)
+            url = getattr(src, "url", None)
+
+            if doi and doi in seen_doi:
+                dedup_map[src.source_id] = seen_doi[doi]
+                continue
+            if url and url in seen_url:
+                dedup_map[src.source_id] = seen_url[url]
+                continue
+
+            if doi:
+                seen_doi[doi] = src.source_id
+            if url:
+                seen_url[url] = src.source_id
+
+        unique_sources = [s for s in self.sources if s.source_id not in dedup_map]
+
         # Build display map: internal source IDs -> sequential readable IDs (R001, R002, ...)
         self.source_display_map = {}
-        for i, src in enumerate(self.sources, 1):
+        for i, src in enumerate(unique_sources, 1):
             self.source_display_map[src.source_id] = f"R{i:03d}"
+        # Map duplicate source_ids to the same display ID as their canonical source
+        for dup_id, canonical_id in dedup_map.items():
+            self.source_display_map[dup_id] = self.source_display_map.get(canonical_id, canonical_id)
 
         def _display_id(source_id: str) -> str:
             return self.source_display_map.get(source_id, source_id)
@@ -280,10 +306,10 @@ class QueryContext:
                     sections.append(f"- {doc}")
                 sections.append("")
 
-        # Sources section
+        # Sources section (deduplicated)
         if self.sources:
             sections.append("## SOURCES IN KNOWLEDGE BASE\n")
-            for s in self.sources[:20]:
+            for s in unique_sources[:20]:
                 authors = f" by {s.authors}" if s.authors else ""
                 year = f" ({s.publication_year})" if s.publication_year else ""
                 sections.append(f"[{_display_id(s.source_id)}]: {s.title}{authors}{year}")
